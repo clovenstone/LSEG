@@ -1,11 +1,14 @@
 package com.lseg.assignment;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.util.*;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 
+import static java.math.RoundingMode.HALF_UP;
+import static java.time.ZoneId.systemDefault;
+import static java.util.Date.from;
 import static java.util.Objects.nonNull;
 import static java.util.stream.Collectors.toList;
 
@@ -26,27 +29,28 @@ public class CumRetCalculator {
             return 0;
         }
 
-        Map<Date, Double> rangedDate = new HashMap<>();
+        Map<Date, Double> periodDailyReturns = new HashMap<>();
 
-        LocalDate asOfLocal = new java.sql.Date(asOf.getTime()).toLocalDate();
-        LocalDate baseLocal = new java.sql.Date(base.getTime()).toLocalDate();
+        var asOfLocal = new java.sql.Date(asOf.getTime()).toLocalDate();
+        var baseLocal = new java.sql.Date(base.getTime()).toLocalDate();
 
-        List<Date> period = baseLocal.datesUntil(asOfLocal)
-                .map(d -> Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant()))
+        //build the period that has daily return value
+        var period = baseLocal.datesUntil(asOfLocal)
+                .map(d -> from(d.atStartOfDay(systemDefault()).toInstant()))
+                .filter(dailyReturns::containsKey)
                 .collect(toList());
 
-        period.stream()
-                .filter(dailyReturns::containsKey)
-                .forEachOrdered(d -> rangedDate.put(d, dailyReturns.get(d)));
+        //build a period based daily returns collection
+        period.forEach(d -> periodDailyReturns.put(d, dailyReturns.get(d)));
 
+        //reduce the value of each daily return with sum *=(1+v) and finally minus 1
         return BigDecimal.valueOf(
-                rangedDate
-                        .values()
+                periodDailyReturns.values()
                         .parallelStream()
                         .map(d -> d + 1)
                         .mapToDouble(rate -> rate)
                         .reduce(1, (a, b) -> a * b) - 1
-        ).setScale(5, RoundingMode.HALF_UP)
+        ).setScale(5, HALF_UP)
                 .doubleValue();
     }
 
